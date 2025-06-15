@@ -1,3 +1,5 @@
+use crate::network::statistic::{count_sd_addr, f_describe};
+use crate::network::types::http::{HttpFilter, HttpMessage, f_process_http_1_x};
 use crate::network::types::tcp1::{NetworkStats, RttEstimator, TcpFlow};
 use crate::network::types::tcp1::{
     f_analyze_tcp_network, f_estimate_rtt, f_trace_tcp_conn, gen_rtt_estimator,
@@ -10,8 +12,10 @@ use rustyline::{Editor, Result as RustylineResult};
 use shlex::split;
 use std::collections::HashMap;
 use std::error::Error;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::str::FromStr;
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -47,6 +51,32 @@ enum Command {
     ShowFilter,
     /// Clear current filter
     ClearFilter,
+    /// Analyze HTTP traffic
+    Http {
+        /// Filter by source IP address
+        #[arg(long)]
+        src_ip: Option<String>,
+        /// Filter by destination IP address
+        #[arg(long)]
+        dst_ip: Option<String>,
+        /// Filter by HTTP method (e.g., GET, POST)
+        #[arg(long)]
+        method: Option<String>,
+        /// Filter by status code (for responses)
+        #[arg(long)]
+        status_code: Option<u16>,
+        /// Filter by path containing a string (for requests)
+        #[arg(long)]
+        path_contains: Option<String>,
+    },
+    /// Show top source/destination IP addresses
+    Top {
+        /// Number of top IPs to show (default: 10)
+        #[arg(short, long, default_value_t = 10)]
+        count: u8,
+    },
+    /// Show statistical summary of network traffic(pandas-like describe)
+    Describe,
     /// Exit the REPL
     Exit,
 }
@@ -103,6 +133,26 @@ fn get_prompt(pcap_name: &str, filter: Option<&String>) -> String {
         Some(f) => format!("{} [filter:{}] >>> ", pcap_name, f),
         None => format!("{} >>> ", pcap_name),
     }
+}
+
+fn process_http(
+    pcap_path: &str,
+    filter: Option<&str>,
+    http_filter: HttpFilter,
+) -> Result<(), Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    f_process_http_1_x(cap, http_filter, true);
+    Ok(())
+}
+
+fn describe_network(pcap_path: &str, filter: Option<&str>) -> Result<(), Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    f_describe(cap)
+}
+
+fn top_ips(pcap_path: &str, filter: Option<&str>, count: u8) -> Result<(), Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    count_sd_addr(cap, count)
 }
 
 pub fn run_app() -> RustylineResult<()> {
@@ -256,6 +306,59 @@ pub fn run_app() -> RustylineResult<()> {
                             println!("Caches cleared - data will be reprocessed without filter");
                         } else {
                             println!("No filter was set");
+                        }
+                    }
+                    Command::Http {
+                        src_ip,
+                        dst_ip,
+                        method,
+                        status_code,
+                        path_contains,
+                    } => {
+                        // Parse IP addresses if provided
+                        let src_ip = src_ip
+                            .map(|s| IpAddr::from_str(&s))
+                            .transpose()
+                            .map_err(|e| format!("Invalid source IP: {}", e))
+                            .unwrap();
+
+                        let dst_ip = dst_ip
+                            .map(|s| IpAddr::from_str(&s))
+                            .transpose()
+                            .map_err(|e| format!("Invalid destination IP: {}", e))
+                            .unwrap();
+
+                        let http_filter = HttpFilter {
+                            src_ip,
+                            dst_ip,
+                            method,
+                            status_code,
+                            path_contains,
+                        };
+
+                        match process_http(
+                            &app_state.pcap_path,
+                            app_state.bpf_filter.as_deref(),
+                            http_filter,
+                        ) {
+                            Ok(_) => println!("HTTP analysis completed"),
+                            Err(e) => println!("Error processing HTTP: {}", e),
+                        }
+                    }
+                    Command::Top { count } => {
+                        match top_ips(&app_state.pcap_path, app_state.bpf_filter.as_deref(), count)
+                        {
+                            Ok(_) => println!("Top IP analysis completed"),
+                            Err(e) => println!("Error: {}", e),
+                        }
+                    }
+                    Command::Describe => {
+                        match describe_network(
+                            &app_state.pcap_path,
+                            app_state.bpf_filter.as_deref(),
+                        ) {
+                            Ok(_) => println!("Statistical analysis completed"),
+                            Err(e) => println!("Error: {}", e),
                         }
                     }
                     Command::Exit => {
