@@ -1,7 +1,7 @@
 use crate::network::statistic::{count_sd_addr, f_describe};
 use crate::network::types::http::{HttpFilter, HttpMessage, f_process_http_1_x};
-use crate::network::types::tcp1::{NetworkStats, RttEstimator, TcpFlow};
-use crate::network::types::tcp1::{
+use crate::network::types::tcp::{NetworkStats, RttEstimator, TcpFlow};
+use crate::network::types::tcp::{
     f_analyze_tcp_network, f_estimate_rtt, f_trace_tcp_conn, gen_rtt_estimator,
 };
 use clap::Parser;
@@ -260,7 +260,7 @@ pub fn run_app() -> RustylineResult<()> {
 
                         let conns = app_state.traced_conns.as_ref().unwrap();
                         for (key, flow) in conns {
-                            crate::network::types::tcp1::print_connection(key, flow);
+                            crate::network::types::tcp::print_connection(key, flow);
                         }
                     }
                     Command::Overview => {

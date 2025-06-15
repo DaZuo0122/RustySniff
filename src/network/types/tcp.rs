@@ -5,10 +5,12 @@ use pnet::packet::ethernet::{EtherTypes, EthernetPacket};
 use pnet::packet::ipv4::Ipv4Packet;
 use pnet::packet::ipv6::Ipv6Packet;
 use pnet::packet::tcp::TcpPacket;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
+use std::net::IpAddr;
 
 type ConnectionKey = (String, u16, String, u16, u32);
+type Quad = (String, u16, String, u16); // (src_ip, src_port, dst_ip, dst_port)
 
 pub struct RttStats {
     count: usize,
@@ -21,6 +23,22 @@ pub struct RttStats {
 pub struct RttEstimator {
     pending: HashMap<ConnectionKey, f64>,
     stats: HashMap<String, RttStats>,
+}
+
+pub struct NetworkStats {
+    rtt_stats: RttStats,
+    retrans_count: u32,
+    fast_retrans_count: u32,
+    dup_ack_count: u32,
+    lost_segment_count: u32,
+    window_stats: WindowStats,
+}
+
+struct WindowStats {
+    min: u16,
+    max: u16,
+    sum: u64,
+    count: u32,
 }
 
 #[derive(Debug)]
@@ -37,6 +55,7 @@ struct TcpPacketInfo {
     seq: u32,
     ack: u32,
     payload_len: usize,
+    window: u16,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -86,7 +105,8 @@ impl RttStats {
     fn std_dev(&self) -> f64 {
         if self.count > 1 {
             let mean = self.average();
-            ((self.squared_sum / self.count as f64) - (mean * mean)).sqrt()
+            let variance = (self.squared_sum / self.count as f64) - (mean * mean);
+            variance.sqrt()
         } else {
             0.0
         }
@@ -101,9 +121,12 @@ impl RttEstimator {
         }
     }
 
-    pub fn process_ipv4(&mut self, payload: &[u8], ts: f64) {
+    pub fn process_ipv4(&mut self, payload: &[u8], ts: f64, network_stats: &mut NetworkStats) {
         if let Some(ipv4) = Ipv4Packet::new(payload) {
             if let Some(tcp) = TcpPacket::new(ipv4.payload()) {
+                // Record window size
+                network_stats.record_window(tcp.get_window());
+
                 let payload_len = tcp.payload().len();
 
                 if payload_len > 0 {
@@ -138,15 +161,19 @@ impl RttEstimator {
                         let (pair, _) = normalize_connection(&dst_ip, &src_ip);
                         let entry = self.stats.entry(pair).or_insert(RttStats::new());
                         entry.add_sample(rtt);
+                        network_stats.record_rtt(rtt);
                     }
                 }
             }
         }
     }
 
-    pub fn process_ipv6(&mut self, payload: &[u8], ts: f64) {
+    pub fn process_ipv6(&mut self, payload: &[u8], ts: f64, network_stats: &mut NetworkStats) {
         if let Some(ipv6) = Ipv6Packet::new(payload) {
             if let Some(tcp) = TcpPacket::new(ipv6.payload()) {
+                // Record window size
+                network_stats.record_window(tcp.get_window());
+
                 let payload_len = tcp.payload().len();
 
                 if payload_len > 0 {
@@ -181,6 +208,7 @@ impl RttEstimator {
                         let (pair, _) = normalize_connection(&dst_ip, &src_ip);
                         let entry = self.stats.entry(pair).or_insert(RttStats::new());
                         entry.add_sample(rtt);
+                        network_stats.record_rtt(rtt);
                     }
                 }
             }
@@ -211,6 +239,83 @@ impl RttEstimator {
     }
 }
 
+impl NetworkStats {
+    pub fn new() -> Self {
+        NetworkStats {
+            rtt_stats: RttStats::new(),
+            retrans_count: 0,
+            fast_retrans_count: 0,
+            dup_ack_count: 0,
+            lost_segment_count: 0,
+            window_stats: WindowStats {
+                min: u16::MAX,
+                max: u16::MIN,
+                sum: 0,
+                count: 0,
+            },
+        }
+    }
+
+    pub fn record_rtt(&mut self, rtt: f64) {
+        self.rtt_stats.add_sample(rtt);
+    }
+
+    pub fn record_retrans(&mut self) {
+        self.retrans_count += 1;
+    }
+
+    pub fn record_fast_retrans(&mut self) {
+        self.fast_retrans_count += 1;
+    }
+
+    pub fn record_dup_ack(&mut self) {
+        self.dup_ack_count += 1;
+    }
+
+    pub fn record_lost_segment(&mut self) {
+        self.lost_segment_count += 1;
+    }
+
+    pub fn record_window(&mut self, window: u16) {
+        self.window_stats.min = self.window_stats.min.min(window);
+        self.window_stats.max = self.window_stats.max.max(window);
+        self.window_stats.sum += window as u64;
+        self.window_stats.count += 1;
+    }
+
+    pub fn print(&self) {
+        println!("Network Statistics Overview:");
+        println!("================================================");
+        println!("{:<30} {:>10}", "Metric", "Value");
+        println!("------------------------------------------------");
+        println!(
+            "{:<30} {:>10.3} ms",
+            "Average RTT",
+            self.rtt_stats.average() * 1000.0
+        );
+        println!("{:<30} {:>10}", "Retransmission Count", self.retrans_count);
+        println!(
+            "{:<30} {:>10}",
+            "Fast Retransmission Count", self.fast_retrans_count
+        );
+        println!("{:<30} {:>10}", "Duplicate ACK Count", self.dup_ack_count);
+        println!(
+            "{:<30} {:>10}",
+            "Lost Segment Count", self.lost_segment_count
+        );
+        println!("{:<30} {:>10}", "Min Window Size", self.window_stats.min);
+        println!("{:<30} {:>10}", "Max Window Size", self.window_stats.max);
+        if self.window_stats.count > 0 {
+            println!(
+                "{:<30} {:>10.1}",
+                "Avg Window Size",
+                self.window_stats.sum as f64 / self.window_stats.count as f64
+            );
+        }
+        println!("================================================");
+    }
+}
+
 /// Generate RTT estimator for tcp connections with given pcap file.
 /// When f_print set to True, it'll print the all rtt stats and reture None,
 /// otherwise it'll print nothing and reture a RttEstimator.
@@ -219,14 +324,15 @@ pub fn gen_rtt_estimator(
     f_print: bool,
 ) -> Result<Option<RttEstimator>, Box<dyn Error>> {
     let mut estimator = RttEstimator::new();
+    let mut network_stats = NetworkStats::new();
 
     while let Ok(packet) = cap.next_packet() {
         let ts = packet.header.ts.tv_sec as f64 + packet.header.ts.tv_usec as f64 / 1_000_000.0;
 
         if let Some(eth) = EthernetPacket::new(packet.data) {
             match eth.get_ethertype() {
-                EtherTypes::Ipv4 => estimator.process_ipv4(eth.payload(), ts),
-                EtherTypes::Ipv6 => estimator.process_ipv6(eth.payload(), ts),
+                EtherTypes::Ipv4 => estimator.process_ipv4(eth.payload(), ts, &mut network_stats),
+                EtherTypes::Ipv6 => estimator.process_ipv6(eth.payload(), ts, &mut network_stats),
                 _ => (),
             }
         }
@@ -247,7 +353,7 @@ pub fn gen_rtt_estimator(
 pub fn f_estimate_rtt(
     src: &str,
     dst: &str,
-    estimator: RttEstimator,
+    estimator: &RttEstimator,
     f_print: bool,
 ) -> Result<Option<Vec<f64>>, Box<dyn Error>> {
     let (key, _) = normalize_connection(src, dst);
@@ -306,8 +412,8 @@ pub fn f_trace_tcp_conn(
     }
 
     if f_print {
-        for (key, flow) in connections {
-            print_connection(&key, &flow);
+        for (key, flow) in &connections {
+            print_connection(key, flow);
         }
         None
     } else {
@@ -352,6 +458,7 @@ fn process_tcp_packet(
         seq: tcp.get_sequence(),
         ack: tcp.get_acknowledgement(),
         payload_len: tcp.payload().len(),
+        window: tcp.get_window(),
     };
 
     let flow = connections
@@ -426,12 +533,12 @@ fn update_connection_state(flow: &mut TcpFlow) {
     };
 }
 
-fn print_connection(conn_key: &str, flow: &TcpFlow) {
+pub fn print_connection(conn_key: &str, flow: &TcpFlow) {
     println!("\nTCP Connection: {}", conn_key);
     println!("State: {:?}", flow.state);
     println!(
-        "{:<6} {:<12} {:<8} {:<10} {:<10} {:<6}",
-        "No.", "Time", "Dir", "Flags", "Seq", "Ack"
+        "{:<6} {:<12} {:<8} {:<10} {:<10} {:<10} {:<6}",
+        "No.", "Time", "Dir", "Flags", "Seq", "Ack", "Win"
     );
 
     for (i, pkt) in flow.packets.iter().enumerate() {
@@ -440,14 +547,166 @@ fn print_connection(conn_key: &str, flow: &TcpFlow) {
             Direction::ServerToClient => "<--",
         };
         println!(
-            "{:4} {:8.3} {:4} {:10} {:10} {:10} ({})",
+            "{:4} {:8.3} {:4} {:10} {:10} {:10} {:5} ({})",
             i + 1,
             pkt.timestamp,
             dir,
             pkt.flags,
             pkt.seq,
             pkt.ack,
+            pkt.window,
             pkt.payload_len
         );
     }
+}
+
+/// Analyze network traffic and provide comprehensive statistics
+pub fn f_analyze_tcp_network(mut cap: Capture<Offline>) -> Result<NetworkStats, Box<dyn Error>> {
+    let mut estimator = RttEstimator::new();
+    let mut network_stats = NetworkStats::new();
+    let mut seq_tracker: HashMap<Quad, HashSet<u32>> = HashMap::new();
+    let mut ack_tracker: HashMap<Quad, u32> = HashMap::new();
+    let mut dup_ack_counts: HashMap<Quad, u32> = HashMap::new();
+
+    while let Ok(packet) = cap.next_packet() {
+        let ts = packet.header.ts.tv_sec as f64 + packet.header.ts.tv_usec as f64 / 1_000_000.0;
+
+        if let Some(eth) = EthernetPacket::new(packet.data) {
+            match eth.get_ethertype() {
+                EtherTypes::Ipv4 => {
+                    if let Some(ipv4) = Ipv4Packet::new(eth.payload()) {
+                        if let Some(tcp) = TcpPacket::new(ipv4.payload()) {
+                            let src_ip = ipv4.get_source().to_string();
+                            let dst_ip = ipv4.get_destination().to_string();
+                            let quad = (
+                                src_ip.clone(),
+                                tcp.get_source(),
+                                dst_ip.clone(),
+                                tcp.get_destination(),
+                            );
+
+                            // Detect retransmissions
+                            let seq = tcp.get_sequence();
+                            let quad_key = quad.clone();
+                            let seen_set = seq_tracker
+                                .entry(quad_key.clone())
+                                .or_insert(HashSet::new());
+
+                            if seen_set.contains(&seq) {
+                                network_stats.record_retrans();
+
+                                // Detect fast retransmissions (triggered by 3 duplicate ACKs)
+                                let rev_quad = (quad.2.clone(), quad.3, quad.0.clone(), quad.1);
+
+                                if let Some(count) = dup_ack_counts.get(&rev_quad) {
+                                    if *count >= 3 {
+                                        network_stats.record_fast_retrans();
+                                    }
+                                }
+                            } else {
+                                seen_set.insert(seq);
+                            }
+
+                            // Detect duplicate ACKs
+                            if tcp.get_flags() & 0x10 != 0 {
+                                // ACK flag set
+                                let ack_num = tcp.get_acknowledgement();
+                                let rev_quad = (quad.2.clone(), quad.3, quad.0.clone(), quad.1);
+
+                                if let Some(last_ack) = ack_tracker.get(&rev_quad) {
+                                    if *last_ack == ack_num {
+                                        network_stats.record_dup_ack();
+
+                                        // Track consecutive duplicate ACKs
+                                        let count =
+                                            dup_ack_counts.entry(rev_quad.clone()).or_insert(0);
+                                        *count += 1;
+                                    } else {
+                                        // Reset duplicate counter when new ACK arrives
+                                        dup_ack_counts.insert(rev_quad.clone(), 0);
+                                    }
+                                }
+                                ack_tracker.insert(rev_quad, ack_num);
+                            }
+
+                            // Detect lost segments (using RST as heuristic)
+                            if tcp.get_flags() & 0x04 != 0 {
+                                // RST flag
+                                network_stats.record_lost_segment();
+                            }
+                        }
+                    }
+                    estimator.process_ipv4(eth.payload(), ts, &mut network_stats);
+                }
+                EtherTypes::Ipv6 => {
+                    if let Some(ipv6) = Ipv6Packet::new(eth.payload()) {
+                        if let Some(tcp) = TcpPacket::new(ipv6.payload()) {
+                            let src_ip = format!("[{}]", ipv6.get_source());
+                            let dst_ip = format!("[{}]", ipv6.get_destination());
+                            let quad = (
+                                src_ip.clone(),
+                                tcp.get_source(),
+                                dst_ip.clone(),
+                                tcp.get_destination(),
+                            );
+
+                            // Detect retransmissions
+                            let seq = tcp.get_sequence();
+                            let quad_key = quad.clone();
+                            let seen_set = seq_tracker
+                                .entry(quad_key.clone())
+                                .or_insert(HashSet::new());
+
+                            if seen_set.contains(&seq) {
+                                network_stats.record_retrans();
+
+                                // Detect fast retransmissions
+                                let rev_quad = (quad.2.clone(), quad.3, quad.0.clone(), quad.1);
+
+                                if let Some(count) = dup_ack_counts.get(&rev_quad) {
+                                    if *count >= 3 {
+                                        network_stats.record_fast_retrans();
+                                    }
+                                }
+                            } else {
+                                seen_set.insert(seq);
+                            }
+
+                            // Detect duplicate ACKs
+                            if tcp.get_flags() & 0x10 != 0 {
+                                // ACK flag set
+                                let ack_num = tcp.get_acknowledgement();
+                                let rev_quad = (quad.2.clone(), quad.3, quad.0.clone(), quad.1);
+
+                                if let Some(last_ack) = ack_tracker.get(&rev_quad) {
+                                    if *last_ack == ack_num {
+                                        network_stats.record_dup_ack();
+
+                                        // Track consecutive duplicate ACKs
+                                        let count =
+                                            dup_ack_counts.entry(rev_quad.clone()).or_insert(0);
+                                        *count += 1;
+                                    } else {
+                                        // Reset duplicate counter
+                                        dup_ack_counts.insert(rev_quad.clone(), 0);
+                                    }
+                                }
+                                ack_tracker.insert(rev_quad, ack_num);
+                            }
+
+                            // Detect lost segments
+                            if tcp.get_flags() & 0x04 != 0 {
+                                // RST flag
+                                network_stats.record_lost_segment();
+                            }
+                        }
+                    }
+                    estimator.process_ipv6(eth.payload(), ts, &mut network_stats);
+                }
+                _ => (),
+            }
+        }
+    }
+
+    Ok(network_stats)
 }
