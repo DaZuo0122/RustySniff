@@ -11,7 +11,7 @@ RustySniff is a powerful command-line network analysis tool that provides a REPL
 
 ## Installation
 ### Dependencies
-RustySniff requires `libpcap` for packet capture functionality. Install it for your platform:  
+RustySniff requires `libpcap` for packet analysis functionality. Install it for your platform:  
 **macOS (using Homebrew)**  
 ```bash
 brew install libpcap
