@@ -1,0 +1,16 @@
+[package]
+name = "rustysniff-pysdk"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "rustysniffpy"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+network = { path = "../network" }
+pyo3 = { version = "0.25.0", features = ["extension-module"] }
+pcap = "2.2.0"
+pnet = "0.35.0"
+httparse = "1.10.1"
