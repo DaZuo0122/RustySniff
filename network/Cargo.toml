@@ -12,3 +12,4 @@ crate-type = ["rlib"]
 pcap = "2.2.0"
 pnet = "0.35.0"
 httparse = "1.10.1"
+dns-parser = "0.8.0"

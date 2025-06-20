@@ -1,6 +1,7 @@
 use clap::Parser;
 use clap::builder::TypedValueParser as _;
 use network::statistic::{count_sd_addr, f_describe};
+use network::types::dns::{DnsFilter, DnsRecord, f_process_dns};
 use network::types::http::{HttpFilter, HttpMessage, f_process_http_1_x};
 use network::types::tcp::{NetworkStats, RttEstimator, TcpFlow};
 use network::types::tcp::{
@@ -68,6 +69,27 @@ enum Command {
         /// Filter by path containing a string (for requests)
         #[arg(long)]
         path_contains: Option<String>,
+    },
+    /// Analyze DNS traffic
+    Dns {
+        /// Filter by domain (query or answer contains)
+        #[arg(long)]
+        domain: Option<String>,
+        /// Filter by response (true) or query (false)
+        #[arg(long)]
+        response: Option<bool>,
+        /// Filter by response code (0-10)
+        #[arg(long)]
+        rcode: Option<u8>,
+        /// Filter by query type (A, AAAA, MX, etc.)
+        #[arg(long)]
+        qtype: Option<String>,
+        /// Filter by minimum number of answers
+        #[arg(long)]
+        min_answers: Option<usize>,
+        /// Filter by protocol (UDP or TCP)
+        #[arg(long)]
+        protocol: Option<String>,
     },
     /// Show top source/destination IP addresses
     Top {
@@ -343,6 +365,37 @@ pub fn run_app() -> RustylineResult<()> {
                         ) {
                             Ok(_) => println!("HTTP analysis completed"),
                             Err(e) => println!("Error processing HTTP: {}", e),
+                        }
+                    }
+                    Command::Dns {
+                        domain,
+                        response,
+                        rcode,
+                        qtype,
+                        min_answers,
+                        protocol,
+                    } => {
+                        let dns_filter = DnsFilter {
+                            domain,
+                            is_response: response,
+                            rcode,
+                            query_type: qtype,
+                            min_answers,
+                            protocol,
+                        };
+
+                        match f_process_dns(
+                            &app_state.pcap_path,
+                            app_state.bpf_filter.as_deref(),
+                            Some(dns_filter),
+                        ) {
+                            Ok(records) => {
+                                for record in &records {
+                                    record.print();
+                                }
+                                println!("Found {} DNS records.", records.len());
+                            }
+                            Err(e) => println!("Error processing DNS: {}", e),
                         }
                     }
                     Command::Top { count } => {

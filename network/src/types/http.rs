@@ -247,7 +247,7 @@ pub fn f_process_http_1_x(
             None => continue,
         };
 
-        // We'll process IP and TCP in the same match block to maintain proper lifetimes
+        // Process IP and TCP in the same match block to maintain proper lifetimes
         match eth.get_ethertype() {
             EtherTypes::Ipv4 => {
                 let ip = match Ipv4Packet::new(eth.payload()) {
