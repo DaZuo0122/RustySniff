@@ -43,7 +43,7 @@ cargo install --git https://github.com/DaZuo0122/RustySniff.git
   3. Clone repository:
   ```bash
   git clone https://github.com/DaZuo0122/RustySniff.git
-  cd rustysniff
+  cd RustySniff
   ```
   4. Build with Cargo:
   ```bash
@@ -104,3 +104,41 @@ http --src-ip 192.168.1.100 --path-contains admin
 
 ## Contributing
 Contributions are welcome! 
+>[!TIP]
+> If you are using **GNU toolchain**(MinGw) on windows, please follow the instructions below to build libpcap dependency (this requires you have at least a linux VM).
+
+**NB**: This instruction uses **Ubuntu/Debian** commands as an example.  
+  1. Make sure you have `cmake` and GNU toolchain installed.  
+  2. Install build dependencies
+     ```bash
+     sudo apt install mingw-w64
+
+     # and
+
+     sudo apt install flex bison
+     ```
+  3. Download [Npcap SDK source code](https://npcap.com/#download) and create a new folder under `path/to/npcap/wpcap`.
+     ```bash
+     mkdir build-win64 && cd ./build-win64
+     ```
+  4. Run build command
+     ```bash
+     cmake -DCMAKE_SYSTEM_NAME=Windows  -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc  -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++  -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=TRUE  -DOpenSSL_FOUND=FALSE  -DLIBRARY_NAME=wpcap  -DPCAP_TYPE=null ../libpcap/
+
+     # and
+
+     make
+     ```
+  5. Check built SDK
+     ```bash
+     ls libwpcap.a
+     ```
+     You should get following if built successful
+     ```text
+     libwpcap.a  # It's all you need, would better rename it as wpcap.a
+     ```
+  6. Create a folder named `.cargo` under `path/to/RustySniff` and then create `.cargo/config.toml`. In `config.toml`, write the following:
+     ```toml
+     [build]
+     rustflags = ["-L", "path/to/folder/contains/wpcap.a"]
+     ```
