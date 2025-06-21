@@ -85,6 +85,7 @@ pub fn statisticpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NetworkSummary>()?;
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path, top))]
     fn count_sd_addr_data(file_path: &str, top: u8) -> PyResult<TopIPs> {
         let cap = Capture::from_file(file_path)
             .map_err(|e| exceptions::PyIOError::new_err(e.to_string()))?;
@@ -128,6 +129,7 @@ pub fn statisticpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path))]
     fn f_describe_data(file_path: &str) -> PyResult<NetworkSummary> {
         let cap = Capture::from_file(file_path)
             .map_err(|e| exceptions::PyIOError::new_err(e.to_string()))?;

@@ -1,4 +1,3 @@
-// src/http_wrapper.rs
 use network::types::http::{self, HttpFilter, HttpMessage, f_process_http_1_x};
 use pyo3::exceptions;
 use pyo3::prelude::*;
@@ -72,61 +71,61 @@ pub struct PyHttpFilter {
 #[pymethods]
 impl PyHttpFilter {
     #[new]
-    fn new() -> Self {
+    pub fn new() -> Self {
         PyHttpFilter {
             inner: HttpFilter::default(),
         }
     }
 
     #[getter]
-    fn src_ip(&self) -> Option<String> {
+    pub fn src_ip(&self) -> Option<String> {
         self.inner.src_ip.as_ref().map(|ip| ip.to_string())
     }
 
     #[setter]
-    fn set_src_ip(&mut self, ip: &str) -> PyResult<()> {
+    pub fn set_src_ip(&mut self, ip: &str) -> PyResult<()> {
         self.inner.src_ip = Some(parse_ip(ip)?);
         Ok(())
     }
 
     #[getter]
-    fn dst_ip(&self) -> Option<String> {
+    pub fn dst_ip(&self) -> Option<String> {
         self.inner.dst_ip.as_ref().map(|ip| ip.to_string())
     }
 
     #[setter]
-    fn set_dst_ip(&mut self, ip: &str) -> PyResult<()> {
+    pub fn set_dst_ip(&mut self, ip: &str) -> PyResult<()> {
         self.inner.dst_ip = Some(parse_ip(ip)?);
         Ok(())
     }
 
     #[getter]
-    fn method(&self) -> Option<String> {
+    pub fn method(&self) -> Option<String> {
         self.inner.method.clone()
     }
 
     #[setter]
-    fn set_method(&mut self, method: &str) {
+    pub fn set_method(&mut self, method: &str) {
         self.inner.method = Some(method.to_string());
     }
 
     #[getter]
-    fn status_code(&self) -> Option<u16> {
+    pub fn status_code(&self) -> Option<u16> {
         self.inner.status_code
     }
 
     #[setter]
-    fn set_status_code(&mut self, code: u16) {
+    pub fn set_status_code(&mut self, code: u16) {
         self.inner.status_code = Some(code);
     }
 
     #[getter]
-    fn path_contains(&self) -> Option<String> {
+    pub fn path_contains(&self) -> Option<String> {
         self.inner.path_contains.clone()
     }
 
     #[setter]
-    fn set_path_contains(&mut self, substring: &str) {
+    pub fn set_path_contains(&mut self, substring: &str) {
         self.inner.path_contains = Some(substring.to_string());
     }
 }
@@ -151,6 +150,7 @@ pub fn httpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHttpFilter>()?;
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path, filter, f_print))]
     fn process_http_1_x(
         file_path: &str,
         filter: &PyHttpFilter,

@@ -187,6 +187,7 @@ pub fn tcpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRttEstimator>()?;
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path, f_print))]
     fn gen_rtt_estimator(file_path: &str, f_print: bool) -> PyResult<Option<PyRttEstimator>> {
         let cap = pcap::Capture::from_file(file_path)
             .map_err(|e| exceptions::PyIOError::new_err(e.to_string()))?;
@@ -196,6 +197,7 @@ pub fn tcpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    #[pyo3(signature = (src, dst, estimator, f_print))]
     fn f_estimate_rtt(
         src: &str,
         dst: &str,
@@ -207,6 +209,7 @@ pub fn tcpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path, f_print))]
     fn f_trace_tcp_conn(
         file_path: &str,
         f_print: bool,
@@ -218,6 +221,7 @@ pub fn tcpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
 
     #[pyfn(m)]
+    #[pyo3(signature = (file_path))]
     fn f_analyze_tcp_network(file_path: &str) -> PyResult<PyNetworkStats> {
         let cap = pcap::Capture::from_file(file_path)
             .map_err(|e| exceptions::PyIOError::new_err(e.to_string()))?;
