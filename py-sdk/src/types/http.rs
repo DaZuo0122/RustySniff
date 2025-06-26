@@ -145,7 +145,7 @@ fn parse_ip(ip_str: &str) -> PyResult<IpAddr> {
 
 // Module initialization
 #[pymodule]
-pub fn httpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn httpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyHttpMessage>()?;
     m.add_class::<PyHttpFilter>()?;
 

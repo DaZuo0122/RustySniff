@@ -177,7 +177,7 @@ pub struct PyRttEstimator {
 
 // PyO3 Module
 #[pymodule]
-pub fn tcpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn tcpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyDirection>()?;
     m.add_class::<PyConnectionState>()?;
     m.add_class::<PyTcpPacketInfo>()?;

@@ -79,7 +79,7 @@ pub struct NetworkSummary {
 
 // Module initialization
 #[pymodule]
-pub fn statisticpy(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn statisticpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TopIPs>()?;
     m.add_class::<ProtocolStat>()?;
     m.add_class::<NetworkSummary>()?;
