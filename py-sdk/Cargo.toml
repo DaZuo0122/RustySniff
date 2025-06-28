@@ -8,6 +8,10 @@ name = "rustysniffpy"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
+[package.metadata.maturin]
+module-name = "rustysniffpy"
+python-source = "python"
+
 [dependencies]
 network = { path = "../network" }
 pyo3 = { version = "0.25.0", features = ["extension-module"] }
