@@ -1,7 +1,6 @@
 use rustyline::Result as RustylineResult;
 
-mod cli;
-mod network;
+pub mod cli;
 
 use cli::run_app;
 

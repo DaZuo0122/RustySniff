@@ -142,3 +142,22 @@ Contributions are welcome!
      [build]
      rustflags = ["-L", "path/to/folder/contains/wpcap.a"]
      ```
+### Building py-sdk
+**NB**: This instruction uses **uv** commands as an example.
+  1. Install [maturin](https://www.maturin.rs/)
+  2. Build wheels for python
+     ```bash
+     cd py-sdk
+     # and
+     maturin build --release
+     # wheels locates at ../target/wheels/
+     ```
+  3. Install built wheels (example `rustysniff_pysdk-0.1.0-cp312-cp312-win_amd64.whl`)
+     ```bash
+     # In your python virtual environment
+     uv pip install path/to/wheels
+     ```
+  4. Using it in python
+     ```python
+     from rustysniffpy import *
+     ```

@@ -13,59 +13,59 @@ type ConnectionKey = (String, u16, String, u16, u32);
 type Quad = (String, u16, String, u16); // (src_ip, src_port, dst_ip, dst_port)
 
 pub struct RttStats {
-    count: usize,
-    sum: f64,
-    min: f64,
-    max: f64,
-    squared_sum: f64,
+    pub count: usize,
+    pub sum: f64,
+    pub min: f64,
+    pub max: f64,
+    pub squared_sum: f64,
 }
 
 pub struct RttEstimator {
-    pending: HashMap<ConnectionKey, f64>,
-    stats: HashMap<String, RttStats>,
+    pub pending: HashMap<ConnectionKey, f64>,
+    pub stats: HashMap<String, RttStats>,
 }
 
 pub struct NetworkStats {
-    rtt_stats: RttStats,
-    retrans_count: u32,
-    fast_retrans_count: u32,
-    dup_ack_count: u32,
-    lost_segment_count: u32,
-    window_stats: WindowStats,
+    pub rtt_stats: RttStats,
+    pub retrans_count: u32,
+    pub fast_retrans_count: u32,
+    pub dup_ack_count: u32,
+    pub lost_segment_count: u32,
+    pub window_stats: WindowStats,
 }
 
-struct WindowStats {
-    min: u16,
-    max: u16,
-    sum: u64,
-    count: u32,
+pub struct WindowStats {
+    pub min: u16,
+    pub max: u16,
+    pub sum: u64,
+    pub count: u32,
 }
 
 #[derive(Debug)]
 pub struct TcpFlow {
-    packets: Vec<TcpPacketInfo>,
-    state: ConnectionState,
+    pub packets: Vec<TcpPacketInfo>,
+    pub state: ConnectionState,
 }
 
 #[derive(Debug, Clone)]
-struct TcpPacketInfo {
-    timestamp: f64,
-    direction: Direction,
-    flags: String,
-    seq: u32,
-    ack: u32,
-    payload_len: usize,
-    window: u16,
+pub struct TcpPacketInfo {
+    pub timestamp: f64,
+    pub direction: Direction,
+    pub flags: String,
+    pub seq: u32,
+    pub ack: u32,
+    pub payload_len: usize,
+    pub window: u16,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Direction {
+pub enum Direction {
     ClientToServer,
     ServerToClient,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum ConnectionState {
+pub enum ConnectionState {
     Init,
     SynSent,
     SynReceived,
@@ -76,7 +76,7 @@ enum ConnectionState {
 }
 
 impl RttStats {
-    fn new() -> Self {
+    pub fn new() -> Self {
         RttStats {
             count: 0,
             sum: 0.0,
@@ -86,7 +86,7 @@ impl RttStats {
         }
     }
 
-    fn add_sample(&mut self, rtt: f64) {
+    pub fn add_sample(&mut self, rtt: f64) {
         self.count += 1;
         self.sum += rtt;
         self.min = self.min.min(rtt);
@@ -94,7 +94,7 @@ impl RttStats {
         self.squared_sum += rtt * rtt;
     }
 
-    fn average(&self) -> f64 {
+    pub fn average(&self) -> f64 {
         if self.count > 0 {
             self.sum / self.count as f64
         } else {
@@ -102,7 +102,7 @@ impl RttStats {
         }
     }
 
-    fn std_dev(&self) -> f64 {
+    pub fn std_dev(&self) -> f64 {
         if self.count > 1 {
             let mean = self.average();
             let variance = (self.squared_sum / self.count as f64) - (mean * mean);
@@ -253,6 +253,14 @@ impl NetworkStats {
                 sum: 0,
                 count: 0,
             },
+        }
+    }
+
+    pub fn avg_window(&self) -> f64 {
+        if self.window_stats.count > 0 {
+            self.window_stats.sum as f64 / self.window_stats.count as f64
+        } else {
+            0.0
         }
     }
 
