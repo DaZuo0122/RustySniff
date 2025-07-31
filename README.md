@@ -5,6 +5,8 @@ RustySniff is a powerful command-line network analysis tool that provides a REPL
 - **Interactive REPL interface** for exploring network captures
 - **TCP analysis**: RTT estimation, connection tracing
 - **HTTP/1.x analysis** with request/response inspection
+- **DNS analysis** with request/response inspection
+- **GFW-like detections(*experimental*)**, try improving your proxies
 - **Statistical summaries** of network traffic
 - **Top talkers identification** by IP address
 - **BPF filter support** for focused analysis
@@ -69,6 +71,8 @@ capture.pcap >>>
 | `trace` | Trace TCP connections | `trace`|
 | `overview` | Show network overview statistics | `overview` |
 | `http` | Analyze HTTP traffic with filters | `http --method GET` |
+| `dns` | Analyze DNS traffic with filters | `dns` or `dns --qtype A |
+| `gfw` | Act as GFW (China's Great fireWall) to detect proxy traffic | `gfw --fet` |
 | `top` | Show top source/destination IPs | `top --count 20` |
 | `describe`| Similar to pandas `df.describe()`, show statistical summary of traffic | `describe`|
 | `filter` | Set BPF filter for subsequent commands	| `filter "tcp port 443"` |
@@ -94,13 +98,51 @@ Example:
 http --src-ip 192.168.1.100 --path-contains admin
 ```
 
+## DNS Analysis Options
+When using the `dns` command, you can filter results with:
+
+- `--domain`: Filter by domain (query or answer contains)
+
+- `--response`: Filter by response (true) or query (false) [possible values: true, false]
+
+- `--rcode`: Filter by response code (0-10)
+
+- `--qtype`: Filter by query type (A, AAAA, MX, etc.)
+
+- `--min-answers`: Filter by minimum number of answers
+
+- `--protocol`: Filter by protocol (UDP or TCP)
+
+Example:
+```bash
+dns --qtype A
+```
+
+## GFW
+**NB**: It's an experimental feature.  
+As GFW is a black-box, this feature was implemented based on public-known informations (mainly comes from [GFW Report](https://gfw.report)).  
+It now supports detection of two types of proxy protocol, FET (Fully Encrypted Traffic, see [this paper](https://gfw.report/publications/usenixsecurity23/data/paper/paper.pdf)) and Trojan (inspired by [XTLS/Trojan-killer](https://github.com/XTLS/Trojan-killer)).  
+Feel free to test with your protocols.
+
+Command `gfw` requires an option, you can choose one of the followings:
+
+- `--fet`: Detect FET (Fully Encrypted Traffic) proxy protocols (eg. vmess)
+
+- `--trojan`: Detect trojan-like protocols traffic (tls-in-tls patterns)
+
+Example:
+```bash
+gfw --fet
+```
+
 ## Roadmap
 - Python Scripting Support:
   - Embed Python interpreter for custom analysis scripts
   - Scriptable packet processing pipelines
   - Extensible analysis framework
   - Use DS/ML libraries for further analysis
-- TLS/SSL decryption support (with provided keys)
+- TLS handshake analysis
+- More GFW abilities
 
 ## Contributing
 Contributions are welcome! 
