@@ -1,5 +1,7 @@
-use clap::Parser;
 use clap::builder::TypedValueParser as _;
+use clap::{ArgGroup, Parser};
+use network::gfw::gtcp::fet::{FETAnalyzer, f_analyze_fet};
+use network::gfw::gtcp::trojan::{TrojanAnalyzer, f_analyze_trojan, match_trojan};
 use network::statistic::{count_sd_addr, f_describe};
 use network::types::dns::{DnsFilter, DnsRecord, f_process_dns};
 use network::types::http::{HttpFilter, HttpMessage, f_process_http_1_x};
@@ -7,6 +9,7 @@ use network::types::tcp::{NetworkStats, RttEstimator, TcpFlow};
 use network::types::tcp::{
     f_analyze_tcp_network, f_estimate_rtt, f_trace_tcp_conn, gen_rtt_estimator,
 };
+// use network::types::tls::{TlsFilter, TlsHandshake, f_analyze_handshake};
 use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use rustyline::{Editor, Result as RustylineResult};
@@ -17,9 +20,10 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::str::FromStr;
+// use std::time::Duration;
 
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version, about = "A lightweight REPL network traffic analyzer")]
 struct Cli {
     /// The pcap file to analyze
     pcap_file: PathBuf,
@@ -29,6 +33,17 @@ struct Cli {
 struct ReplCommand {
     #[command(subcommand)]
     cmd: Command,
+}
+
+#[derive(Parser, Debug)]
+#[command(group(ArgGroup::new("gfw").required(true).multiple(false)))]
+struct GFWArgs {
+    /// Detect FET (Fully Encrypted Traffic) proxy protocols (eg. vmess)
+    #[arg(long, group = "gfw")]
+    fet: bool,
+    /// Detect trojan-like protocols traffic (tls-in-tls patterns)
+    #[arg(long, group = "gfw")]
+    trojan: bool,
 }
 
 #[derive(clap::Subcommand)]
@@ -91,6 +106,29 @@ enum Command {
         #[arg(long)]
         protocol: Option<String>,
     },
+    /*
+    Tls {
+        /// Filter by minimum version
+        #[arg(long)]
+        min_version: Option<u16>,
+        /// Filter by maximum version
+        #[arg(long)]
+        max_version: Option<u16>,
+        /// Filter by cipher suit offered
+        #[arg(long)]
+        cipher_offered: Option<Vec<u16>>,
+        /// Filter by cipher suit chosen
+        #[arg(long)]
+        cipher_chosen: Option<u16>,
+        #[arg(long)]
+        sni_contains: Option<String>,
+        #[arg(long)]
+        alpn_contains: Option<String>,
+        #[arg(long)]
+        ja3_hash: Option<String>,
+    },*/
+    /// Act like GFW (China's Great fireWall), detecting proxy protocols
+    Gfw(GFWArgs),
     /// Show top source/destination IP addresses
     Top {
         /// Number of top IPs to show (default: 10)
@@ -148,6 +186,28 @@ fn get_network_stats(
 ) -> Result<NetworkStats, Box<dyn Error>> {
     let cap = open_pcap(pcap_path, filter)?;
     f_analyze_tcp_network(cap)
+}
+
+/*
+fn get_tls_handshake(
+    pcap_path: &str,
+    filter: Option<&str>,
+    tls_filter: TlsFilter,
+) -> Result<Option<Vec<TlsHandshake>>, Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    Ok(f_analyze_handshake(cap, tls_filter, true))
+}*/
+
+fn get_fet_result(pcap_path: &str, filter: Option<&str>) -> Result<(), Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    f_analyze_fet(cap, true);
+    Ok(())
+}
+
+fn get_trojan_result(pcap_path: &str, filter: Option<&str>) -> Result<(), Box<dyn Error>> {
+    let cap = open_pcap(pcap_path, filter)?;
+    f_analyze_trojan(cap, true);
+    Ok(())
 }
 
 fn get_prompt(pcap_name: &str, filter: Option<&String>) -> String {
@@ -396,6 +456,54 @@ pub fn run_app() -> RustylineResult<()> {
                                 println!("Found {} DNS records.", records.len());
                             }
                             Err(e) => println!("Error processing DNS: {}", e),
+                        }
+                    } /*
+                    Command::Tls {
+                    min_version,
+                    max_version,
+                    cipher_offered,
+                    cipher_chosen,
+                    sni_contains,
+                    alpn_contains,
+                    ja3_hash,
+                    } => {
+                    let tls_filter = TlsFilter {
+                    min_version,
+                    max_version,
+                    cipher_offered,
+                    cipher_chosen,
+                    sni_contains,
+                    alpn_contains,
+                    ja3_hash,
+                    min_duration: None,
+                    max_duration: None,
+                    };
+                    match get_tls_handshake(
+                    &app_state.pcap_path,
+                    app_state.bpf_filter.as_deref(),
+                    tls_filter,
+                    ) {
+                    Ok(_) => println!("TLS handshake analysis completed"),
+                    Err(e) => println!("Error: {}", e),
+                    }
+                    }*/
+                    Command::Gfw(gfw_opt) => {
+                        if gfw_opt.fet {
+                            match get_fet_result(
+                                &app_state.pcap_path,
+                                app_state.bpf_filter.as_deref(),
+                            ) {
+                                Ok(_) => println!("FET analysis completed"),
+                                Err(e) => println!("Error: {}", e),
+                            }
+                        } else if gfw_opt.trojan {
+                            match get_trojan_result(
+                                &app_state.pcap_path,
+                                app_state.bpf_filter.as_deref(),
+                            ) {
+                                Ok(_) => println!("Trojan protocol analysis completed"),
+                                Err(e) => println!("Error: {}", e),
+                            }
                         }
                     }
                     Command::Top { count } => {
